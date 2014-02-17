@@ -1,0 +1,56 @@
+<StructList> :=				<EOLEX> | 
+							"." <ID> <ArchetypeDecl> ";" <StructList> |
+							<FieldOrStructList> 
+
+<ArchetypeDecl> :=			"(" <IDList> ")"
+
+<IDList> :=					<ID> <IDList'>
+
+<IDList'> :=				"," <IDList> |
+							[e]
+
+<FieldOrStructList> :=		<ID> <StructTail> <FieldOrStructList>
+
+<InnerStructList> :=		<ID> <StructTail> <InnerStructList> |
+							[e]
+
+<StructTail> :=				"{" <InnerStructList> "}" |
+							<InheritClause> <StatementEndOrStruct> |
+							<ArchetypeClause> <StatementEndOrStruct> |
+							<Value> <StatementEndOrStruct>
+
+<StatementEndOrStruct> :=	";" |
+							"{" <InnerStructList> "}" |
+							<InheritClause> <StatementEndOrStruct> 
+							<ArchetypeClause> <StatementEndOrStruct>
+
+<ArchetypeClause> :=		"(" <ValueList> ")"
+
+<InheritClause> :=			":" <ID> <Value>
+
+<StructBody> :=				"{" <StructList> "}" |
+							";"
+
+<Value> :=					"[" <ArrayValues> "]" |
+							<STRING> |
+							<Number>
+
+<ValueList> :=				<Value> <ValueListPrime>
+
+<ValueListPrime> :=			"," <Value> <ValueListPrime> |
+							[e]
+
+<ArrayValues> :=			<STRING> <StringArray> |
+							<Number> <NumberArray>
+
+<StringArray> :=			"," <String> <StringArray> |
+							[e]
+
+<NumberArray> :=			"," <Number> <NumberArray> |
+							[e]
+
+<Number> :=					"-" <NumberToken> |
+							<NumberToken>
+							
+<NumberToken> :=			[INTEGER] | [FLOAT]
+
