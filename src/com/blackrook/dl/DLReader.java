@@ -9,6 +9,7 @@ package com.blackrook.dl;
 
 import java.io.*;
 
+import com.blackrook.commons.Common;
 import com.blackrook.commons.hash.HashMap;
 import com.blackrook.commons.linkedlist.Queue;
 import com.blackrook.commons.linkedlist.Stack;
@@ -23,6 +24,8 @@ import com.blackrook.lang.Parser;
  */
 public class DLReader
 {
+	private static final String CLASSPATH_PREFIX = "classpath:";
+
 	/** Creates a new reader. */
 	public DLReader()
 	{
@@ -86,25 +89,41 @@ public class DLReader
 	/**
 	 * Returns a stream to a resource using a string path.
 	 * May return null, if the path refers to a resource that doesn't exist.
-	 * @deprecated As of version 2.1.2. Override {@link #getIncludeResource(String, String)} instead.
-	 * This will still be called, but you won't know the original stream path that is at the top of the stack. 
 	 */
-	public InputStream getIncludeResource(String path) throws IOException
+	public InputStream getIncludeResource(String streamName, String path) throws IOException
 	{
-		return new FileInputStream(new File(path));
+		if (Common.isWindows() && streamName.contains("\\")) // check for Windows paths.
+			streamName = streamName.replace('\\', '/');
+		
+		String streamParent = null;
+		int lidx = -1; 
+		if ((lidx = streamName.lastIndexOf('/')) >= 0)
+			streamParent = streamName.substring(0, lidx + 1);
+		
+		if (path.startsWith(CLASSPATH_PREFIX) || (streamParent != null && streamParent.startsWith(CLASSPATH_PREFIX)))
+			return Common.openResource(((streamParent != null ? streamParent : "") + path).substring(CLASSPATH_PREFIX.length()));
+		else
+		{
+			File f = null;
+			if (streamParent != null)
+			{
+				f = new File(streamParent + path);
+				if (f.exists())
+					return new FileInputStream(f);
+				else
+					return new FileInputStream(new File(path));
+			}
+			else
+			{
+				return new FileInputStream(new File(path));
+			}
+			
+		}
+		
 	}
 	
 	/**
-	 * Returns a stream to a resource using a string path.
-	 * May return null, if the path refers to a resource that doesn't exist.
-	 */
-	public InputStream getIncludeResource(String currentSreamName, String path) throws IOException
-	{
-		return getIncludeResource(path);
-	}
-	
-	/**
-	 * Kernel for DLLexer.
+	 * Kernel for DLLexerKernel.
 	 */
 	private static class DLLexerKernel extends CommonLexerKernel
 	{
@@ -220,7 +239,7 @@ public class DLReader
 			
 			else if (matchType(DLLexerKernel.TYPE_PERIOD))
 			{
-				if (!currentType(DLLexer.TYPE_IDENTIFIER))
+				if (!currentType(DLLexerKernel.TYPE_IDENTIFIER))
 				{
 					addErrorMessage("Expected identifier.");
 					return false;
@@ -232,8 +251,11 @@ public class DLReader
 				if (!ArchetypeDecl())
 					return false;
 				
-				if (!matchTypeStrict(DLLexerKernel.TYPE_SEMICOLON))
-					return false; 
+				if (!matchType(DLLexerKernel.TYPE_SEMICOLON))
+				{
+					addErrorMessage("Expected ';'");
+					return false;
+				}
 				
 				if (!StructList())
 					return false;
@@ -249,14 +271,20 @@ public class DLReader
 		 */
 		private boolean ArchetypeDecl()
 		{
-			if (!matchTypeStrict(DLLexerKernel.TYPE_LPAREN))
+			if (!matchType(DLLexerKernel.TYPE_LPAREN))
+			{
+				addErrorMessage("Expected '('");
 				return false;
+			}
 			
 			if (!IDList())
 				return false;
 
-			if (!matchTypeStrict(DLLexerKernel.TYPE_RPAREN))
+			if (!matchType(DLLexerKernel.TYPE_RPAREN))
+			{
+				addErrorMessage("Expected ')'");
 				return false;
+			}
 			
 			// Store Archetype IDs
 			String[] archids = new String[currentName.size()-1];
@@ -274,7 +302,7 @@ public class DLReader
 		 */
 		private boolean StructDecl()
 		{
-			if (currentType(DLLexer.TYPE_IDENTIFIER))
+			if (currentType(DLLexerKernel.TYPE_IDENTIFIER))
 			{
 				currentName.push(currentToken().getLexeme());
 				nextToken();
@@ -294,7 +322,7 @@ public class DLReader
 		 */
 		private boolean InnerStructList()
 		{
-			if (currentType(DLLexer.TYPE_IDENTIFIER))
+			if (currentType(DLLexerKernel.TYPE_IDENTIFIER))
 			{
 				currentName.push(currentToken().getLexeme());
 				nextToken();
@@ -323,8 +351,11 @@ public class DLReader
 				if (!InnerStructList())
 					return false;
 				
-				if (!matchTypeStrict(DLLexerKernel.TYPE_RBRACE))
+				if (!matchType(DLLexerKernel.TYPE_RBRACE))
+				{
+					addErrorMessage("Expected '}'");
 					return false;
+				}
 				
 				popStruct();
 				currentName.pop();
@@ -395,8 +426,11 @@ public class DLReader
 				if (!InnerStructList())
 					return false;
 				
-				if (!matchTypeStrict(DLLexerKernel.TYPE_RBRACE))
+				if (!matchType(DLLexerKernel.TYPE_RBRACE))
+				{
+					addErrorMessage("Expected '{'");
 					return false;
+				}
 				
 				popStruct();
 				currentName.pop();
@@ -421,7 +455,7 @@ public class DLReader
 				return StatementEndOrStruct();
 			}
 			
-			addTypeError(DLLexerKernel.TYPE_SEMICOLON, DLLexerKernel.TYPE_LPAREN, DLLexerKernel.TYPE_LBRACE, DLLexerKernel.TYPE_COLON);
+			addErrorMessage("Expected ';' '(' ')' or ':'");
 			return false;
 		}
 		
@@ -430,10 +464,13 @@ public class DLReader
 		 */
 		private boolean InheritClause()
 		{
-			if (!matchTypeStrict(DLLexerKernel.TYPE_COLON))
+			if (!matchType(DLLexerKernel.TYPE_COLON))
+			{
+				addErrorMessage("Expected ';'");
 				return false;
+			}
 			
-			if (!currentType(DLLexer.TYPE_IDENTIFIER))
+			if (!currentType(DLLexerKernel.TYPE_IDENTIFIER))
 			{
 				addErrorMessage("Expected identifier.");
 				return false;
@@ -480,16 +517,22 @@ public class DLReader
 		 */
 		private boolean ArchetypeClause()
 		{
-			if (!matchTypeStrict(DLLexerKernel.TYPE_LPAREN))
+			if (!matchType(DLLexerKernel.TYPE_LPAREN))
+			{
+				addErrorMessage("Expected '('");
 				return false;
+			}
 		
 			int startSize = currentValue.size();
 			
 			if (!ValueList())
 				return false;
 			
-			if (!matchTypeStrict(DLLexerKernel.TYPE_RPAREN))
+			if (!matchType(DLLexerKernel.TYPE_RPAREN))
+			{
+				addErrorMessage("Expected ')'");
 				return false;
+			}
 			
 			String archName = currentName.peek();
 			String[] params = archetypeTable.get(archName);
@@ -519,7 +562,7 @@ public class DLReader
 		// <IDList> :=	<ID> <IDList'>
 		private boolean IDList()
 		{
-			if (currentType(DLLexer.TYPE_IDENTIFIER))
+			if (currentType(DLLexerKernel.TYPE_IDENTIFIER))
 			{
 				currentName.push(currentToken().getLexeme());
 				nextToken();
@@ -551,13 +594,16 @@ public class DLReader
 				if (!ArrayValues())
 					return false;
 				
-				if (!matchTypeStrict(DLLexerKernel.TYPE_RBRACK))
+				if (!matchType(DLLexerKernel.TYPE_RBRACK))
+				{
+					addErrorMessage("Expected ']'");
 					return false;
+				}
 				
 				return true;
 			}
 			
-			else if (currentType(DLLexer.TYPE_STRING))
+			else if (currentType(DLLexerKernel.TYPE_STRING))
 			{
 				currentValue.push(new DLValue(currentToken().getLexeme()));
 				nextToken();
@@ -603,7 +649,7 @@ public class DLReader
 		//					<Number> <NumberArray>
 		private boolean ArrayValues()
 		{
-			if (currentType(DLLexer.TYPE_STRING))
+			if (currentType(DLLexerKernel.TYPE_STRING))
 			{
 				currentValue.push(new DLValue(currentToken().getLexeme()));
 				nextToken();
@@ -622,7 +668,7 @@ public class DLReader
 		{
 			if (matchType(DLLexerKernel.TYPE_COMMA))
 			{
-				if (!currentType(DLLexer.TYPE_STRING))
+				if (!currentType(DLLexerKernel.TYPE_STRING))
 				{
 					addErrorMessage("Expected string in string array.");
 					return false;
@@ -669,7 +715,7 @@ public class DLReader
 		{
 			int n = negate ? -1 : 1;
 			
-			if (currentType(DLLexer.TYPE_NUMBER) || currentType(DLLexer.TYPE_FLOAT))
+			if (currentType(DLLexerKernel.TYPE_NUMBER) || currentType(DLLexerKernel.TYPE_FLOAT))
 			{
 				currentValue.push(new DLValue(n*Double.parseDouble(currentToken().getLexeme())));
 				nextToken();
@@ -693,32 +739,6 @@ public class DLReader
 			return returned;
 		}
 
-		@Override
-		protected String getTypeErrorText(int tokenType)
-		{
-			switch (tokenType)
-			{
-				case DLLexerKernel.TYPE_LPAREN:
-					return "'('";
-				case DLLexerKernel.TYPE_RPAREN:
-					return "')'";
-				case DLLexerKernel.TYPE_LBRACE:
-					return "'{'";
-				case DLLexerKernel.TYPE_RBRACE:
-					return "'}'";
-				case DLLexerKernel.TYPE_LBRACK:
-					return "'['";
-				case DLLexerKernel.TYPE_RBRACK:
-					return "']'";
-				case DLLexerKernel.TYPE_SEMICOLON:
-					return "';'";
-				case DLLexerKernel.TYPE_COLON:
-					return "':'";
-				case DLLexerKernel.TYPE_COMMA:
-					return "','";
-			}
-			return "";
-		}
 	}
 	
 }
