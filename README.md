@@ -321,6 +321,24 @@ without using user-generated data structures in its linguistic format.
 DLReader and DLWriter are utility classes used to read/write DL to/from files,
 respectively.
 
+### Compiling with Ant
+
+To download the dependencies for this project (if you didn't set that up yourself already), type:
+
+	ant dependencies
+
+A *build.properties* file will be created/appended to with the *dev.base* property set.
+	
+To compile this library with Apache Ant, type:
+
+	ant compile
+
+To make a JAR of this library, type:
+
+	ant jar
+
+And it will be placed in the *build/jar* directory.
+
 ### Other
 
 This program and the accompanying materials
